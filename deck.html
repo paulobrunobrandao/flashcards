@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a1628">
+<title>Náutico Flashcards — Deck</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
+</head>
+<body>
+<div class="page">
+  <div class="user-bar">
+    <a href="home.html" style="color:rgba(201,168,76,0.6);text-decoration:none;font-size:.8rem;">
+      <i class="ti ti-arrow-left" aria-hidden="true"></i> Módulos
+    </a>
+    <button class="btn-logout" onclick="logout()"><i class="ti ti-logout" aria-hidden="true"></i> Sair</button>
+  </div>
+
+  <div class="container">
+    <div class="brand" style="padding-top:1rem">
+      <div class="brand-compass" id="modCodigo">—</div>
+      <div class="brand-title" id="modNome">Carregando...</div>
+      <div class="brand-sub" id="modStats">—</div>
+    </div>
+
+    <div class="divider"><span class="divider-icon">◆</span></div>
+
+    <p class="section-label">Como quer estudar?</p>
+
+    <div style="display:flex; gap:12px; margin-bottom:1.5rem;">
+      <div class="mode-card" id="modeCompleto" onclick="selectMode('completo')">
+        <div class="mode-icon">🧭</div>
+        <div class="mode-title">Revisão completa</div>
+        <div class="mode-desc">Todos os cards em ordem aleatória</div>
+      </div>
+      <div class="mode-card" id="modeErros" onclick="selectMode('erros')">
+        <div class="mode-icon">⚠️</div>
+        <div class="mode-title">Foco nos erros</div>
+        <div class="mode-desc" id="errosDesc">Cards onde você mais erra</div>
+      </div>
+    </div>
+
+    <!-- Filtro por tema -->
+    <p class="section-label">Filtrar por tema <span style="opacity:.4">(opcional)</span></p>
+    <div class="tags" id="temasTags">
+      <span class="tag active" data-tema="Todos" onclick="selectTema(this)">Todos</span>
+    </div>
+
+    <button class="btn btn-primary" id="btnStart" onclick="startDeck()" style="margin-top:1rem;" disabled>
+      <i class="ti ti-player-play" aria-hidden="true"></i> Iniciar
+    </button>
+
+    <div class="footer">PSCPP 2027</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script>
+const params   = new URLSearchParams(location.search);
+const moduloId = params.get('id');
+const nome     = params.get('nome');
+const codigo   = params.get('codigo');
+
+let selectedMode = null;
+let selectedTema = 'Todos';
+let allCards = [], erroCards = [], temaCounts = {};
+
+function selectMode(mode) {
+  selectedMode = mode;
+  document.getElementById('modeCompleto').classList.toggle('selected', mode === 'completo');
+  document.getElementById('modeErros').classList.toggle('selected', mode === 'erros');
+  document.getElementById('btnStart').disabled = false;
+}
+
+function selectTema(el) {
+  document.querySelectorAll('.tags .tag').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selectedTema = el.dataset.tema;
+}
+
+function startDeck() {
+  if (!selectedMode) return;
+  const base = selectedMode === 'erros' && erroCards.length ? erroCards : allCards;
+  const filtered = selectedTema === 'Todos' ? base : base.filter(c => c.tema === selectedTema);
+  if (!filtered.length) return alert('Nenhum card para este filtro.');
+  sessionStorage.setItem('deck', JSON.stringify(filtered));
+  sessionStorage.setItem('moduloNome', nome);
+  window.location.href = 'play.html';
+}
+
+async function logout() {
+  await db.auth.signOut();
+  window.location.href = 'index.html';
+}
+
+async function init() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) return window.location.href = 'index.html';
+
+  document.getElementById('modCodigo').textContent = codigo || '—';
+  document.getElementById('modNome').textContent = nome || 'Módulo';
+
+  // Busca cards
+  const { data: cards } = await db.from('cards').select('*').eq('modulo_id', moduloId);
+  allCards = cards || [];
+
+  // Busca histórico
+  const { data: hist } = await db.from('historico')
+    .select('card_id, resultado')
+    .in('card_id', allCards.map(c => c.id));
+
+  // Calcula taxa de erro por card
+  const scoreMap = {};
+  (hist || []).forEach(h => {
+    if (!scoreMap[h.card_id]) scoreMap[h.card_id] = { ok: 0, no: 0 };
+    if (h.resultado === 'acertei') scoreMap[h.card_id].ok++;
+    else scoreMap[h.card_id].no++;
+  });
+
+  // Cards com erro predominante, ordenados do pior
+  erroCards = allCards
+    .filter(c => {
+      const s = scoreMap[c.id];
+      return s && s.no > s.ok;
+    })
+    .sort((a, b) => {
+      const sa = scoreMap[a.id], sb = scoreMap[b.id];
+      const ra = sa.no / (sa.ok + sa.no), rb = sb.no / (sb.ok + sb.no);
+      return rb - ra;
+    });
+
+  // Stats
+  const respondidos = Object.keys(scoreMap).length;
+  document.getElementById('modStats').textContent =
+    `${allCards.length} cards · ${respondidos} respondidos · ${erroCards.length} com erro`;
+
+  const descErros = erroCards.length
+    ? `${erroCards.length} cards onde você mais erra`
+    : 'Nenhum erro registrado ainda';
+  document.getElementById('errosDesc').textContent = descErros;
+
+  // Temas
+  const temas = [...new Set(allCards.map(c => c.tema))];
+  const tagsEl = document.getElementById('temasTags');
+  temas.forEach(t => {
+    const span = document.createElement('span');
+    span.className = 'tag';
+    span.dataset.tema = t;
+    span.textContent = t;
+    span.onclick = function() { selectTema(this); };
+    tagsEl.appendChild(span);
+  });
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a1628">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Náutico Flashcards — Acesso</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
+</head>
+<body>
+<div class="page">
+  <div class="container">
+    <div class="brand">
+      <div class="brand-compass">⚓</div>
+      <div class="brand-title">Náutico Flashcards</div>
+      <div class="brand-sub">PSCPP · Estudo para Práticos</div>
+    </div>
+
+    <div class="divider"><span class="divider-icon">◆</span></div>
+
+    <div class="panel" id="loginPanel">
+      <p class="section-label">Acesso</p>
+      <div id="alertLogin" class="alert"></div>
+
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="seu@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" onclick="login()">
+        <i class="ti ti-login" aria-hidden="true"></i> Entrar
+      </button>
+      <div style="text-align:center; margin-top:1.25rem;">
+        <span class="link" onclick="showPanel('register')">Criar conta</span>
+        &nbsp;·&nbsp;
+        <span class="link" onclick="showPanel('forgot')">Esqueci a senha</span>
+      </div>
+    </div>
+
+    <div class="panel" id="registerPanel" style="display:none">
+      <p class="section-label">Nova conta</p>
+      <div id="alertRegister" class="alert"></div>
+
+      <div class="field">
+        <label>Nome</label>
+        <input type="text" id="regName" placeholder="Seu nome completo">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="seu@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="regPass" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+      </div>
+      <button class="btn btn-primary" onclick="register()">
+        <i class="ti ti-user-plus" aria-hidden="true"></i> Criar conta
+      </button>
+      <div style="text-align:center; margin-top:1.25rem;">
+        <span class="link" onclick="showPanel('login')">Já tenho conta</span>
+      </div>
+    </div>
+
+    <div class="panel" id="forgotPanel" style="display:none">
+      <p class="section-label">Recuperar senha</p>
+      <div id="alertForgot" class="alert"></div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="forgotEmail" placeholder="seu@email.com">
+      </div>
+      <button class="btn btn-secondary" onclick="forgotPass()">
+        <i class="ti ti-mail" aria-hidden="true"></i> Enviar link de recuperação
+      </button>
+      <div style="text-align:center; margin-top:1.25rem;">
+        <span class="link" onclick="showPanel('login')">← Voltar</span>
+      </div>
+    </div>
+
+    <div class="footer">PSCPP 2027 · Fase 1 · Arte Naval</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script>
+function showPanel(name) {
+  ['login','register','forgot'].forEach(p => {
+    document.getElementById(p+'Panel').style.display = p===name ? '' : 'none';
+  });
+}
+
+function showAlert(id, msg, type='error') {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = `alert alert-${type} show`;
+}
+
+async function login() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  if (!email || !pass) return showAlert('alertLogin','Preencha email e senha.');
+  const { error } = await db.auth.signInWithPassword({ email, password: pass });
+  if (error) return showAlert('alertLogin', error.message);
+  window.location.href = 'home.html';
+}
+
+async function register() {
+  const name  = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const pass  = document.getElementById('regPass').value;
+  if (!name || !email || !pass) return showAlert('alertRegister','Preencha todos os campos.');
+  if (pass.length < 6) return showAlert('alertRegister','Senha mínimo 6 caracteres.');
+  const { error } = await db.auth.signUp({
+    email, password: pass,
+    options: { data: { nome: name } }
+  });
+  if (error) return showAlert('alertRegister', error.message);
+  showAlert('alertRegister','Conta criada! Verifique seu email para confirmar.','success');
+}
+
+async function forgotPass() {
+  const email = document.getElementById('forgotEmail').value.trim();
+  if (!email) return showAlert('alertForgot','Informe o email.');
+  const { error } = await db.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/index.html'
+  });
+  if (error) return showAlert('alertForgot', error.message);
+  showAlert('alertForgot','Link enviado! Verifique seu email.','success');
+}
+
+// Tecla Enter
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (document.getElementById('loginPanel').style.display !== 'none') login();
+    else if (document.getElementById('registerPanel').style.display !== 'none') register();
+  }
+});
+
+// Se já logado, redireciona
+(async () => {
+  const { data: { session } } = await db.auth.getSession();
+  if (session) window.location.href = 'home.html';
+})();
+</script>
+</body>
+</html>

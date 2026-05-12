@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a1628">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Náutico Flashcards — Módulos</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
+</head>
+<body>
+<div class="page">
+  <div class="user-bar">
+    <span class="user-name" id="userName">—</span>
+    <button class="btn-logout" onclick="logout()"><i class="ti ti-logout" aria-hidden="true"></i> Sair</button>
+  </div>
+
+  <div class="container">
+    <div class="brand" style="padding-top:1rem">
+      <div class="brand-compass">⚓</div>
+      <div class="brand-title">Náutico Flashcards</div>
+      <div class="brand-sub">Escolha o módulo</div>
+    </div>
+
+    <div class="divider"><span class="divider-icon">◆</span></div>
+
+    <div id="moduleList">
+      <div class="loading">
+        <div class="spinner"></div>
+        Carregando módulos...
+      </div>
+    </div>
+
+    <div class="footer">PSCPP 2027 · Fase 1</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script>
+const ICONS = {
+  'Arte Naval':    'ti-anchor',
+  'Shiphandling':  'ti-ship',
+  'Rebocadores':   'ti-tool',
+  'Navegação':     'ti-compass',
+  'Meteorologia':  'ti-cloud',
+  'Legislação':    'ti-scale',
+  'Comunicações':  'ti-radio',
+  'PNA':           'ti-map',
+};
+
+async function init() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) return window.location.href = 'index.html';
+
+  const nome = session.user.user_metadata?.nome || session.user.email;
+  document.getElementById('userName').textContent = nome;
+
+  const { data: modulos, error } = await db.from('modulos').select('*').eq('ativo', true).order('criado_em');
+  if (error || !modulos?.length) {
+    document.getElementById('moduleList').innerHTML = '<div class="empty"><div class="empty-icon">📚</div>Nenhum módulo disponível.</div>';
+    return;
+  }
+
+  // Busca stats de histórico do usuário
+  const { data: hist } = await db.from('historico').select('card_id, resultado');
+  const errosPorCard = {};
+  (hist || []).forEach(h => {
+    if (!errosPorCard[h.card_id]) errosPorCard[h.card_id] = { ok: 0, no: 0 };
+    if (h.resultado === 'acertei') errosPorCard[h.card_id].ok++;
+    else errosPorCard[h.card_id].no++;
+  });
+
+  // Busca contagem de cards por módulo
+  const { data: cards } = await db.from('cards').select('id, modulo_id');
+
+  // Agrupa por disciplina
+  const disc = {};
+  modulos.forEach(m => {
+    if (!disc[m.disciplina]) disc[m.disciplina] = [];
+    disc[m.disciplina].push(m);
+  });
+
+  let html = '';
+  Object.entries(disc).forEach(([disciplina, mods]) => {
+    html += `<p class="section-label">${disciplina}</p>`;
+    mods.forEach(m => {
+      const mCards = (cards || []).filter(c => c.modulo_id === m.id);
+      const total  = mCards.length;
+      const comErro = mCards.filter(c => {
+        const h = errosPorCard[c.id];
+        return h && h.no > h.ok;
+      }).length;
+      const icon = ICONS[m.disciplina] || 'ti-book';
+      html += `
+        <a class="module-card" href="deck.html?id=${m.id}&nome=${encodeURIComponent(m.nome)}&codigo=${m.codigo}">
+          <div class="module-card-icon"><i class="ti ${icon}" aria-hidden="true"></i></div>
+          <div class="module-card-info">
+            <div class="module-card-code">${m.codigo}</div>
+            <div class="module-card-name">${m.nome}</div>
+            <div class="module-card-meta">${total} cards${comErro > 0 ? ` · ⚠ ${comErro} com erro` : ''}</div>
+          </div>
+          <i class="ti ti-chevron-right module-card-arrow" aria-hidden="true"></i>
+        </a>`;
+    });
+  });
+
+  document.getElementById('moduleList').innerHTML = html;
+}
+
+async function logout() {
+  await db.auth.signOut();
+  window.location.href = 'index.html';
+}
+
+init();
+</script>
+</body>
+</html>

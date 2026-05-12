@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a1628">
+<title>Náutico Flashcards — Estudando</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
+</head>
+<body>
+<div class="page">
+  <div class="user-bar">
+    <a href="deck.html" id="backLink" style="color:rgba(201,168,76,0.6);text-decoration:none;font-size:.8rem;">
+      <i class="ti ti-arrow-left" aria-hidden="true"></i> <span id="modLabel">Módulo</span>
+    </a>
+    <button class="btn-logout" onclick="logout()"><i class="ti ti-logout" aria-hidden="true"></i> Sair</button>
+  </div>
+
+  <div class="container">
+    <!-- Progress -->
+    <div style="padding-top:1rem">
+      <div class="card-counter" id="counter">1 / —</div>
+      <div class="card-progress-bar">
+        <div class="card-progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Relevância -->
+    <div class="relevance-bar" id="relevBar">
+      <div class="relevance-dot alta" id="relevDot"></div>
+      <span class="relevance-label alta" id="relevLabel">Alta relevância</span>
+    </div>
+
+    <!-- Card flip -->
+    <div class="card-flip-wrap" id="cardWrap" onclick="flip()" role="button" aria-label="Virar card">
+      <div class="card-flip-inner" id="cardInner">
+        <div class="card-face card-front" id="cardFront">
+          <div class="card-tema" id="frontTema">—</div>
+          <div class="card-question" id="frontQ">—</div>
+          <div class="card-tap-hint">toque para revelar a resposta</div>
+        </div>
+        <div class="card-face card-back" id="cardBack">
+          <div class="card-tema" id="backTema">—</div>
+          <div class="card-answer" id="backA">—</div>
+          <div class="card-mnem" id="backM" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botões de resultado (aparecem após flip) -->
+    <div class="result-row" id="resultRow" style="display:none">
+      <button class="btn-errei" onclick="marcar('errei')">
+        <i class="ti ti-x" aria-hidden="true"></i> Errei
+      </button>
+      <button class="btn-acertei" onclick="marcar('acertei')">
+        <i class="ti ti-check" aria-hidden="true"></i> Acertei
+      </button>
+    </div>
+
+    <!-- Navegação -->
+    <div class="nav-row">
+      <button class="nav-btn" id="prevBtn" onclick="go(-1)" aria-label="Anterior">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i>
+      </button>
+      <span class="nav-progress" id="navProg">1 / —</span>
+      <button class="nav-btn" id="nextBtn" onclick="go(1)" aria-label="Próximo">
+        <i class="ti ti-arrow-right" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <!-- Placar da sessão -->
+    <div class="stats-row" id="statsRow"></div>
+
+    <button class="btn-shuffle" onclick="shuffle()">
+      <i class="ti ti-arrows-shuffle" aria-hidden="true"></i> embaralhar
+    </button>
+
+    <!-- Tela de conclusão -->
+    <div id="finishScreen" style="display:none">
+      <div class="panel" style="text-align:center; margin-top:1rem;">
+        <div style="font-size:2.5rem; margin-bottom:.75rem;">🎖️</div>
+        <p style="font-family:'Cinzel',serif; color:var(--gold); letter-spacing:.1em; margin-bottom:.5rem;">SESSÃO CONCLUÍDA</p>
+        <p id="finishStats" style="font-size:.85rem; color:rgba(245,240,232,.5); margin-bottom:1.25rem;"></p>
+        <button class="btn btn-primary" onclick="reiniciar()" style="margin-bottom:.75rem;">
+          <i class="ti ti-refresh" aria-hidden="true"></i> Reiniciar
+        </button>
+        <a href="home.html" class="btn btn-secondary">
+          <i class="ti ti-home" aria-hidden="true"></i> Módulos
+        </a>
+      </div>
+    </div>
+
+    <div class="footer">PSCPP 2027</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script>
+let deck = [], idx = 0, flipped = false;
+let sessaoOk = 0, sessaoErro = 0;
+let userId = null;
+
+const RELEV = {
+  alta:  { label: 'Alta relevância',  cls: 'alta'  },
+  media: { label: 'Média relevância', cls: 'media' },
+  baixa: { label: 'Baixa relevância', cls: 'baixa' },
+};
+
+function renderCard() {
+  const c = deck[idx];
+  if (!c) return;
+
+  const r = RELEV[c.relevancia] || RELEV.media;
+  document.getElementById('relevDot').className   = `relevance-dot ${r.cls}`;
+  document.getElementById('relevLabel').className = `relevance-label ${r.cls}`;
+  document.getElementById('relevLabel').textContent = r.label;
+
+  document.getElementById('frontTema').textContent = c.tema;
+  document.getElementById('frontQ').textContent    = c.pergunta;
+  document.getElementById('backTema').textContent  = c.tema;
+  document.getElementById('backA').textContent     = c.resposta;
+
+  const mEl = document.getElementById('backM');
+  if (c.mnemonico) {
+    mEl.textContent = '💡 ' + c.mnemonico;
+    mEl.style.display = '';
+  } else {
+    mEl.style.display = 'none';
+  }
+
+  const pct = deck.length > 1 ? (idx / (deck.length - 1)) * 100 : 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('counter').textContent  = `${idx+1} / ${deck.length}`;
+  document.getElementById('navProg').textContent  = `${idx+1} / ${deck.length}`;
+  document.getElementById('prevBtn').disabled = idx === 0;
+  document.getElementById('nextBtn').disabled = idx === deck.length - 1;
+
+  // Reset flip
+  flipped = false;
+  document.getElementById('cardInner').classList.remove('flipped');
+  document.getElementById('resultRow').style.display = 'none';
+}
+
+function renderStats() {
+  const total = sessaoOk + sessaoErro;
+  if (!total) { document.getElementById('statsRow').innerHTML = ''; return; }
+  document.getElementById('statsRow').innerHTML = `
+    <span class="stat-pill">✓ <b>${sessaoOk}</b> acertei</span>
+    <span class="stat-pill">✗ <b>${sessaoErro}</b> errei</span>
+    <span class="stat-pill">${Math.round(sessaoOk/total*100)}% acertos</span>`;
+}
+
+function flip() {
+  if (flipped) return;
+  flipped = true;
+  document.getElementById('cardInner').classList.add('flipped');
+  document.getElementById('resultRow').style.display = 'flex';
+}
+
+async function marcar(resultado) {
+  if (!userId) return;
+  const card = deck[idx];
+
+  // Salva no Supabase
+  await db.from('historico').insert({
+    usuario_id: userId,
+    card_id: card.id,
+    resultado
+  });
+
+  if (resultado === 'acertei') sessaoOk++; else sessaoErro++;
+  renderStats();
+
+  // Avança ou mostra conclusão
+  if (idx < deck.length - 1) {
+    go(1);
+  } else {
+    showFinish();
+  }
+}
+
+function go(dir) {
+  const next = idx + dir;
+  if (next < 0 || next >= deck.length) return;
+  idx = next;
+  renderCard();
+}
+
+function shuffle() {
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  idx = 0;
+  renderCard();
+}
+
+function reiniciar() {
+  shuffle();
+  sessaoOk = sessaoErro = 0;
+  renderStats();
+  document.getElementById('finishScreen').style.display = 'none';
+  document.getElementById('cardWrap').style.display = '';
+  document.getElementById('resultRow').style.display = 'none';
+  document.getElementById('navRow') && (document.getElementById('navRow').style.display = '');
+  renderCard();
+}
+
+function showFinish() {
+  const total = sessaoOk + sessaoErro;
+  const pct = total ? Math.round(sessaoOk / total * 100) : 0;
+  document.getElementById('finishStats').textContent =
+    `${sessaoOk} acertos · ${sessaoErro} erros · ${pct}% de aproveitamento`;
+  document.getElementById('finishScreen').style.display = '';
+  document.getElementById('cardWrap').style.display = 'none';
+  document.getElementById('resultRow').style.display = 'none';
+}
+
+async function logout() {
+  await db.auth.signOut();
+  window.location.href = 'index.html';
+}
+
+async function init() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) return window.location.href = 'index.html';
+  userId = session.user.id;
+
+  const raw = sessionStorage.getItem('deck');
+  const modNome = sessionStorage.getItem('moduloNome') || 'Módulo';
+  document.getElementById('modLabel').textContent = modNome;
+
+  if (!raw) return window.location.href = 'home.html';
+  deck = JSON.parse(raw);
+
+  // Embaralha na entrada
+  shuffle();
+  renderCard();
+}
+
+init();
+</script>
+</body>
+</html>
