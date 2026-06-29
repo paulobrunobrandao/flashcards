@@ -1,0 +1,16 @@
+name: Supabase Heartbeat
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Todo dia às 9h (UTC)
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          curl -s \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "https://xtodghuyenpjnuifbrqg.supabase.co/rest/v1/cards?select=count"
