@@ -1,19 +1,17 @@
 name: Supabase Heartbeat
-
 on:
   schedule:
     - cron: '0 9 * * *'
   workflow_dispatch:
-
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase
         env:
-          ANON_KEY: ${{ secrets.x!W1Jz3#wC2f$jfJ }}
+          ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           curl -s \
-            -H "apikey: ${x!W1Jz3#wC2f$jfJ}" \
-            -H "Authorization: Bearer ${x!W1Jz3#wC2f$jfJ}" \
+            -H "apikey: ${ANON_KEY}" \
+            -H "Authorization: Bearer ${ANON_KEY}" \
             "https://xtodghuyenpjnuifbrqg.supabase.co/rest/v1/cards?select=count"
