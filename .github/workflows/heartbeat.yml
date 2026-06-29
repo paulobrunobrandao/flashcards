@@ -2,16 +2,18 @@ name: Supabase Heartbeat
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # Todo dia às 9h (UTC)
-  workflow_dispatch:      # Permite disparar manualmente
+    - cron: '0 9 * * *'
+  workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase
+        env:
+          ANON_KEY: ${{ secrets.x!W1Jz3#wC2f$jfJ }}
         run: |
           curl -s \
-            -H "apikey: ${{x!W1Jz3#wC2f$jfJ}}" \
-            -H "Authorization: Bearer ${{x!W1Jz3#wC2f$jfJ}}" \
+            -H "apikey: ${x!W1Jz3#wC2f$jfJ}" \
+            -H "Authorization: Bearer ${x!W1Jz3#wC2f$jfJ}" \
             "https://xtodghuyenpjnuifbrqg.supabase.co/rest/v1/cards?select=count"
